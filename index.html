@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#0d0d1a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="75Together"/>
+<title>75Together 🔥</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Merriweather:wght@400;700&family=Roboto+Mono&family=Playfair+Display:wght@700&family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>*{box-sizing:border-box;margin:0;padding:0;}html,body{height:100%;overflow:hidden;}#root{height:100%;}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const FONTS = [
+  { name: "Default (System)", value: "'Segoe UI', system-ui, sans-serif" },
+  { name: "Bebas Neue", value: "'Bebas Neue', cursive" },
+  { name: "Merriweather", value: "'Merriweather', serif" },
+  { name: "Roboto Mono", value: "'Roboto Mono', monospace" },
+  { name: "Playfair Display", value: "'Playfair Display', serif" },
+  { name: "Poppins", value: "'Poppins', sans-serif" },
+];
+
+const PRESET_TASKS = [
+  { id: "workout1", label: "Workout 1 – 45 min (any)", icon: "🏋️", required: true },
+  { id: "workout2", label: "Outdoor Workout – 45 min", icon: "🌳", required: true },
+  { id: "water",    label: "Drink 1 Gallon of Water (~3.7L)", icon: "💧", required: true },
+  { id: "read",     label: "Read 10 Pages (Non-fiction only)", icon: "📖", required: true },
+  { id: "diet",     label: "Follow Diet · No cheat · No alcohol", icon: "🥗", required: true },
+  { id: "photo",    label: "Daily Progress Photo", icon: "📸", required: true },
+];
+
+const DEFAULT_QUOTES = [
+  "Every day you don't quit is a day you win. 🔥",
+  "The pain you feel today is the strength you feel tomorrow.",
+  "Discipline is choosing between what you want now and what you want most.",
+  "You don't find willpower, you build it — one day at a time.",
+  "Hard days build strong people. Today is a gift.",
+  "Your partner believes in you. Don't let the team down. 💪",
+  "75 days. One choice. Make it count.",
+  "Suffering is temporary. Pride is permanent.",
+  "The person you'll be in 75 days is waiting for you to start.",
+  "It's supposed to be hard. That's why it changes you.",
+  "You are stronger than your excuses.",
+  "Consistency beats intensity every single time.",
+];
+
+const MILESTONES = [
+  { day: 7,  label: "Week 1 Complete",  emoji: "🌱" },
+  { day: 15, label: "15 Day Streak",    emoji: "⚡" },
+  { day: 30, label: "One Month Strong", emoji: "🔥" },
+  { day: 45, label: "Halfway Hero",     emoji: "🏅" },
+  { day: 60, label: "60 Days of Grit",  emoji: "💎" },
+  { day: 75, label: "75 HARD COMPLETE", emoji: "🏆" },
+];
+
+const getISTDateString = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+const getISTDisplayDate = () =>
+  new Date().toLocaleDateString("en-IN", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata",
+  });
+
+const calcCurrentDay = (startDateISO) => {
+  if (!startDateISO) return 0;
+  const startStr = new Date(startDateISO).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const todayStr = getISTDateString();
+  const diff = Math.floor((new Date(todayStr) - new Date(startStr)) / 86400000);
+  return Math.min(75, Math.max(1, diff + 1));
+};
+
+const initState = () => {
+  try {
+    const saved = localStorage.getItem("75together_v2");
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return {
+    users: {
+      user1: { name: "Gayathri", avatar: "G" },
+      user2: { name: "Krishnan", avatar: "K" },
+    },
+    activeUser: "user1",
+    startDate: null,
+    darkMode: true,
+    font: FONTS[0].value,
+    customTasks: [],
+    quotes: [...DEFAULT_QUOTES],
+    days: {},
+    milestoneGoals: {},
+    nudges: [],
+    photos: {},
+    cultHR: {},
+  };
+};
+
+function App() {
+  const [state, setState]     = useState(initState);
+  const [screen, setScreen]   = useState("home");
+  const [todayKey]            = useState(getISTDateString);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [modal, setModal]     = useState(null);
+  const [nudgeText, setNudgeText]     = useState("");
+  const [newQuote, setNewQuote]       = useState("");
+  const [milestoneDay, setMilestoneDay] = useState(null);
+  const [goalText, setGoalText]       = useState("");
+  const [customTaskInput, setCustomTaskInput] = useState("");
+  const [cultStatus, setCultStatus]   = useState("idle");
+  const [cultHRLive, setCultHRLive]   = useState(null);
+  const cultCharRef = useRef(null);
+  const videoRef  = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const [cameraReady, setCameraReady] = useState(false);
+
+  useEffect(() => {
+    if (modal !== "camera") return;
+    let cancelled = false;
+    setCameraReady(false);
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 } },
+        });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        const attach = () => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => !cancelled && setCameraReady(true);
+          } else { setTimeout(attach, 80); }
+        };
+        attach();
+      } catch (err) {
+        if (!cancelled) {
+          alert("Camera error: " + (err.message || "Allow camera access in browser settings."));
+          setModal(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+      setCameraReady(false);
+    };
+  }, [modal]);
+
+  const save = useCallback((nextState) => {
+    setState(nextState);
+    try { localStorage.setItem("75together_v2", JSON.stringify(nextState)); } catch {}
+  }, []);
+
+  const s           = state;
+  const me          = s.users[s.activeUser];
+  const partnerKey  = s.activeUser === "user1" ? "user2" : "user1";
+  const partner     = s.users[partnerKey];
+  const allTasks    = [...PRESET_TASKS, ...s.customTasks];
+  const todayData   = s.days[todayKey] || {};
+  const myToday     = todayData[s.activeUser] || {};
+  const partnerToday = todayData[partnerKey] || {};
+  const myDone      = Object.values(myToday).filter(Boolean).length;
+  const partDone    = Object.values(partnerToday).filter(Boolean).length;
+  const myPct       = allTasks.length ? Math.round((myDone / allTasks.length) * 100) : 0;
+  const partPct     = allTasks.length ? Math.round((partDone / allTasks.length) * 100) : 0;
+  const currentDay  = calcCurrentDay(s.startDate);
+  const todayQuote  = s.quotes[currentDay % s.quotes.length] || s.quotes[0];
+  const myNudges    = s.nudges.filter(n => n.to === s.activeUser && !n.read);
+
+  const toggleTask = (taskId, baseState) => {
+    const base = baseState || s;
+    const days = JSON.parse(JSON.stringify(base.days));
+    if (!days[todayKey]) days[todayKey] = {};
+    if (!days[todayKey][base.activeUser]) days[todayKey][base.activeUser] = {};
+    const was = days[todayKey][base.activeUser][taskId];
+    days[todayKey][base.activeUser][taskId] = !was;
+    const next = { ...base, days };
+    save(next);
+    if (!was) {
+      const doneCount = Object.values(days[todayKey][base.activeUser]).filter(Boolean).length;
+      if (doneCount === allTasks.length) {
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 3500);
+      }
+    }
+    return next;
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current || !cameraReady) return;
+    const ctx = canvasRef.current.getContext("2d");
+    const w = videoRef.current.videoWidth || 640;
+    const h = videoRef.current.videoHeight || 480;
+    canvasRef.current.width = w;
+    canvasRef.current.height = h;
+    ctx.drawImage(videoRef.current, 0, 0, w, h);
+    const dataUrl = canvasRef.current.toDataURL("image/jpeg", 0.75);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    const photos = JSON.parse(JSON.stringify(s.photos));
+    if (!photos[s.activeUser]) photos[s.activeUser] = {};
+    photos[s.activeUser][todayKey] = dataUrl;
+    const days = JSON.parse(JSON.stringify(s.days));
+    if (!days[todayKey]) days[todayKey] = {};
+    if (!days[todayKey][s.activeUser]) days[todayKey][s.activeUser] = {};
+    days[todayKey][s.activeUser]["photo"] = true;
+    const next = { ...s, photos, days };
+    save(next);
+    const doneCount = Object.values(days[todayKey][s.activeUser]).filter(Boolean).length;
+    if (doneCount === allTasks.length) {
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 3500);
+    }
+    setCameraReady(false);
+    setModal(null);
+  };
+
+  const sendNudge = () => {
+    if (!nudgeText.trim()) return;
+    save({ ...s, nudges: [...s.nudges, { id: Date.now(), from: s.activeUser, to: partnerKey, text: nudgeText, time: new Date().toISOString(), read: false }] });
+    setNudgeText(""); setModal(null);
+  };
+
+  const dismissNudge = (id) => {
+    save({ ...s, nudges: s.nudges.map(n => n.id === id ? { ...n, read: true } : n) });
+  };
+
+  const doReset = () => {
+    save({ ...s, startDate: new Date().toISOString(), days: {}, photos: {}, nudges: [], cultHR: {} });
+    setModal(null); setScreen("home");
+  };
+
+  const saveMilestoneGoal = () => {
+    if (!goalText.trim()) return;
+    save({ ...s, milestoneGoals: { ...s.milestoneGoals, [milestoneDay]: { text: goalText, setBy: s.activeUser } } });
+    setGoalText(""); setModal(null);
+  };
+
+  const connectCult = async () => {
+    setCultStatus("scanning");
+    try {
+      if (!navigator.bluetooth) throw new Error("Use Chrome on Android for Bluetooth.");
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: ["heart_rate"] }, { namePrefix: "Cult" }],
+        optionalServices: ["heart_rate"],
+      });
+      device.addEventListener("gattserverdisconnected", () => { setCultStatus("idle"); setCultHRLive(null); });
+      const server  = await device.gatt.connect();
+      const service = await server.getService("heart_rate");
+      const char    = await service.getCharacteristic("heart_rate_measurement");
+      cultCharRef.current = char;
+      await char.startNotifications();
+      char.addEventListener("characteristicvaluechanged", e => {
+        const flags = e.target.value.getUint8(0);
+        const hr = flags & 0x01 ? e.target.value.getUint16(1, true) : e.target.value.getUint8(1);
+        setCultHRLive(hr);
+        setState(prev => {
+          const updated = { ...prev, cultHR: { ...prev.cultHR, [getISTDateString()]: { hr, time: new Date().toISOString(), device: device.name } } };
+          try { localStorage.setItem("75together_v2", JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      });
+      setCultStatus("connected");
+    } catch { setCultStatus("error"); }
+  };
+
+  const dk     = s.darkMode;
+  const BG     = dk ? "#0d0d1a" : "#f4f4f0";
+  const CARD   = dk ? "#1a1a2e" : "#ffffff";
+  const CARD2  = dk ? "#14142a" : "#f8f8f5";
+  const TXT    = dk ? "#e6e6f0" : "#111128";
+  const MUTED  = dk ? "#8888aa" : "#66668a";
+  const BORDER = dk ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const ACCENT  = "#FF6B35";
+  const ACCENT2 = "#4ECDC4";
+
+  const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Merriweather:wght@400;700&family=Roboto+Mono&family=Playfair+Display:wght@700&family=Poppins:wght@400;600&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body,#root{background:${BG};color:${TXT};font-family:${s.font};height:100%;overflow:hidden;}
+    input,textarea{background:${CARD2};color:${TXT};border:1px solid ${BORDER};border-radius:10px;padding:10px 14px;font-family:${s.font};font-size:14px;width:100%;outline:none;}
+    input:focus,textarea:focus{border-color:${ACCENT};}
+    button{cursor:pointer;font-family:${s.font};border:none;outline:none;transition:all 0.18s;}
+    button:active{transform:scale(0.97);}
+    .bp{background:${ACCENT};color:#fff;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:600;width:100%;}
+    .bs{background:${CARD2};color:${TXT};border:1px solid ${BORDER};border-radius:12px;padding:10px 16px;font-size:13px;}
+    .card{background:${CARD};border-radius:16px;padding:1rem 1.25rem;border:1px solid ${BORDER};}
+    .tr{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:${CARD2};margin-bottom:8px;cursor:pointer;border:1.5px solid transparent;transition:border-color 0.2s,background 0.2s;}
+    .tr.done{border-color:${ACCENT};background:${ACCENT}18;}
+    .cc{width:26px;height:26px;border-radius:50%;border:2px solid ${MUTED};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.25s;}
+    .cc.chk{background:${ACCENT};border-color:${ACCENT};}
+    .nav{display:flex;background:${CARD};border-top:1px solid ${BORDER};padding-bottom:env(safe-area-inset-bottom,4px);flex-shrink:0;}
+    .ni{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 6px;cursor:pointer;border:none;background:none;color:${MUTED};font-size:10px;gap:3px;}
+    .ni.act{color:${ACCENT};}
+    .ni span{font-size:20px;}
+    .sl{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:${MUTED};margin:1rem 0 0.5rem;}
+    .pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+    .fire{display:inline-block;animation:flicker 1.4s ease-in-out infinite alternate;}
+    @keyframes flicker{0%{transform:scale(1) rotate(-2deg)}100%{transform:scale(1.12) rotate(2deg)}}
+    @keyframes pop{0%{transform:scale(0.4);opacity:0}65%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .pop{animation:pop 0.4s cubic-bezier(.34,1.56,.64,1);}
+    .fade{animation:fadeUp 0.28s ease;}
+    ::-webkit-scrollbar{width:0;}
+  `;
+
+  const Ring = ({ pct, color, size = 72, stroke = 7 }) => {
+    const r = (size - stroke) / 2;
+    const circ = 2 * Math.PI * r;
+    const dash = Math.max(0, Math.min(circ, (pct / 100) * circ));
+    return (
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)", flexShrink: 0 }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={BORDER} strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          style={{ transition: "stroke-dasharray 0.5s ease" }}/>
+      </svg>
+    );
+  };
+
+  const heatmap = s.startDate ? Array.from({ length: 75 }, (_, i) => {
+    const d = new Date(new Date(s.startDate).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+    d.setDate(d.getDate() + i);
+    const key = d.toLocaleDateString("en-CA");
+    const dayData = s.days[key]?.[s.activeUser] || {};
+    const done = Object.values(dayData).filter(Boolean).length;
+    return { key, i, done, pct: done / allTasks.length, isPast: i < currentDay - 1, isToday: i === currentDay - 1 };
+  }) : [];
+
+  const Overlay = ({ children }) => (
+    <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.74)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1.25rem",zIndex:200,overflowY:"auto" }}
+      onClick={() => ["nudge","quote","milestone","confirm"].includes(modal) && setModal(null)}>
+      <div onClick={e => e.stopPropagation()} className="pop"
+        style={{ background:CARD,borderRadius:20,padding:"1.5rem",width:"100%",maxWidth:380 }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  if (!s.startDate) {
+    return (
+      <div style={{ background:BG,height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",fontFamily:s.font,color:TXT,overflowY:"auto" }}>
+        <style>{css}</style>
+        <div style={{ fontSize:64,marginBottom:"0.75rem" }}>🔥</div>
+        <div style={{ fontSize:32,fontWeight:700,color:ACCENT,textAlign:"center" }}>75Together</div>
+        <div style={{ color:MUTED,textAlign:"center",margin:"0.5rem 0 2rem",lineHeight:1.7,fontSize:14 }}>
+          The couples edition of 75 Hard.<br/>Gayathri & Krishnan — let's go.
+        </div>
+        <div className="card" style={{ width:"100%",maxWidth:360,marginBottom:"1rem" }}>
+          {["user1","user2"].map((uk, i) => (
+            <div key={uk} style={{ marginBottom: i===0 ? "1rem" : 0 }}>
+              <div style={{ fontSize:11,color:MUTED,marginBottom:4 }}>Partner {i+1} Name</div>
+              <input value={s.users[uk].name}
+                onChange={e => save({ ...s, users:{ ...s.users,[uk]:{ name:e.target.value,avatar:(e.target.value[0]||"?").toUpperCase() } } })}/>
+            </div>
+          ))}
+        </div>
+        <button className="bp" style={{ maxWidth:360 }} onClick={() => save({ ...s, startDate:new Date().toISOString() })}>
+          🚀 Start the 75 Hard Challenge
+        </button>
+        <div style={{ color:MUTED,fontSize:11,marginTop:"1rem",textAlign:"center" }}>IST timezone · Data stored locally on this device</div>
+      </div>
+    );
+  }
+
+  const HomeScreen = (
+    <div style={{ padding:"1rem 1rem 5rem" }} className="fade">
+      {myNudges.map(n => (
+        <div key={n.id} style={{ background:`${ACCENT2}18`,border:`1.5px solid ${ACCENT2}`,borderRadius:14,padding:"12px 14px",marginBottom:"0.75rem",display:"flex",gap:10,alignItems:"flex-start" }}>
+          <div style={{ fontSize:22 }}>💌</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11,color:MUTED }}>{partner.name} nudged you:</div>
+            <div style={{ fontSize:14,color:TXT,marginTop:2,lineHeight:1.5 }}>{n.text}</div>
+          </div>
+          <button onClick={() => dismissNudge(n.id)} style={{ background:ACCENT2,color:"#fff",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:700,flexShrink:0 }}>✓ Got it</button>
+        </div>
+      ))}
+      <div style={{ background:dk?"#1f1f38":"#fff8f5",borderRadius:20,padding:"1.25rem",marginBottom:"1rem",border:`1px solid ${ACCENT}30` }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:10,color:MUTED,fontWeight:700,letterSpacing:1.2 }}>DAY</div>
+            <div style={{ fontSize:52,fontWeight:700,color:ACCENT,lineHeight:1 }}>{currentDay}<span style={{ fontSize:20,color:MUTED }}>/75</span></div>
+            <div style={{ fontSize:12,color:MUTED,marginTop:4 }}>{getISTDisplayDate()}</div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:42 }} className="fire">🔥</div>
+            {cultHRLive && <div style={{ fontSize:13,color:"#ff6b6b",marginTop:4 }}>❤️ {cultHRLive} bpm</div>}
+          </div>
+        </div>
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"1rem" }}>
+        {[{label:"You",pct:myPct,done:myDone,color:ACCENT},{label:partner.name,pct:partPct,done:partDone,color:ACCENT2}].map(({label,pct,done,color}) => (
+          <div key={label} className="card" style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"0.875rem" }}>
+            <div style={{ position:"relative",width:72,height:72 }}>
+              <Ring pct={pct} color={color}/>
+              <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color }}>{pct}%</div>
+            </div>
+            <div style={{ fontSize:13,fontWeight:700,color:TXT }}>{label}</div>
+            <div style={{ fontSize:11,color:MUTED }}>{done}/{allTasks.length}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:10,fontWeight:700,letterSpacing:1.3,color:ACCENT,marginBottom:6 }}>TODAY'S MOTIVATION</div>
+        <div style={{ fontSize:14,color:TXT,lineHeight:1.65,fontStyle:"italic" }}>"{todayQuote}"</div>
+      </div>
+      <div style={{ display:"flex",gap:8,marginBottom:"1rem" }}>
+        <button className="bs" style={{ flex:1 }} onClick={() => setModal("nudge")}>💌 Nudge {partner.name}</button>
+        <button className="bs" style={{ flex:1 }} onClick={() => setModal("camera")}>📸 Take Photo</button>
+      </div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+        <div style={{ fontSize:13,fontWeight:700 }}>Today's Tasks</div>
+        <div className="pill" style={{ background:myPct===100?`${ACCENT}25`:`${ACCENT2}18`,color:myPct===100?ACCENT:ACCENT2 }}>
+          {myPct===100?"✅ All Done!":` ${myPct}% done`}
+        </div>
+      </div>
+      {allTasks.map(task => {
+        const done = !!myToday[task.id];
+        return (
+          <div key={task.id} className={`tr${done?" done":""}`}
+            onClick={() => task.id==="photo" ? setModal("camera") : toggleTask(task.id)}>
+            <div className={`cc${done?" chk":""}`}>{done && <span style={{ color:"#fff",fontSize:13 }}>✓</span>}</div>
+            <div style={{ fontSize:22 }}>{task.icon}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:14,color:done?MUTED:TXT,textDecoration:done?"line-through":"none" }}>{task.label}</div>
+              {task.required && <div style={{ fontSize:9,fontWeight:700,letterSpacing:1.1,color:ACCENT }}>REQUIRED</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const ProgressScreen = (
+    <div style={{ padding:"1rem 1rem 5rem" }} className="fade">
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"0.75rem" }}>
+          <div style={{ fontSize:14,fontWeight:700 }}>75-Day Journey Map</div>
+          <div style={{ fontSize:12,color:MUTED }}>Day {currentDay}/75</div>
+        </div>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:3 }}>
+          {heatmap.map(d => (
+            <div key={d.i} style={{
+              aspectRatio:"1",borderRadius:3,
+              background:d.isToday?ACCENT:d.isPast?(d.pct===1?ACCENT:d.pct>0.5?`${ACCENT}70`:`${ACCENT}30`):BORDER,
+              border:d.isToday?`2px solid ${ACCENT}`:"none",
+            }} title={`Day ${d.i+1}`}/>
+          ))}
+        </div>
+        <div style={{ display:"flex",gap:12,marginTop:10,fontSize:10,color:MUTED,flexWrap:"wrap" }}>
+          <span>◻ Upcoming</span><span style={{ color:`${ACCENT}77` }}>🟧 Partial</span><span style={{ color:ACCENT }}>🟥 Full ✅</span>
+        </div>
+      </div>
+      <div className="sl">Milestones & Partner Rewards</div>
+      {MILESTONES.map(m => {
+        const reached = currentDay >= m.day;
+        const goal = s.milestoneGoals[m.day];
+        return (
+          <div key={m.day} className="card" style={{ marginBottom:8,opacity:reached?1:0.5 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+              <div style={{ fontSize:30 }}>{m.emoji}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13,fontWeight:700,color:reached?ACCENT:TXT }}>{m.label}</div>
+                <div style={{ fontSize:11,color:MUTED }}>Day {m.day}{reached?" — Reached! 🎉":` · ${m.day-currentDay} days away`}</div>
+                {goal && <div style={{ fontSize:12,color:ACCENT2,marginTop:3 }}>🎁 {goal.text}</div>}
+              </div>
+              <button className="bs" style={{ padding:"5px 10px",fontSize:11,flexShrink:0 }}
+                onClick={() => { setMilestoneDay(m.day); setGoalText(goal?.text||""); setModal("milestone"); }}>
+                {goal?"Edit":"Set"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      <div className="sl">Photo Journal — {me.name}</div>
+      {!Object.keys(s.photos[s.activeUser]||{}).length
+        ? <div style={{ color:MUTED,fontSize:13,textAlign:"center",padding:"2rem 0" }}>No photos yet!</div>
+        : <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+            {Object.keys(s.photos[s.activeUser]||{}).sort().reverse().slice(0,12).map(dk2 => (
+              <div key={dk2} style={{ borderRadius:12,overflow:"hidden",aspectRatio:"1",position:"relative" }}>
+                <img src={s.photos[s.activeUser][dk2]} alt={dk2} style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+                <div style={{ position:"absolute",bottom:5,left:5,background:"rgba(0,0,0,0.62)",borderRadius:6,padding:"2px 7px",fontSize:10,color:"#fff" }}>{dk2}</div>
+              </div>
+            ))}
+          </div>
+      }
+    </div>
+  );
+
+  const PartnerScreen = (
+    <div style={{ padding:"1rem 1rem 5rem" }} className="fade">
+      <div className="card" style={{ marginBottom:"1rem",display:"flex",gap:12,alignItems:"center" }}>
+        <div style={{ width:54,height:54,borderRadius:"50%",background:ACCENT2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",flexShrink:0 }}>
+          {partner.avatar}
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:16,fontWeight:700 }}>{partner.name}</div>
+          <div style={{ fontSize:11,color:MUTED }}>Day {currentDay} · {partDone}/{allTasks.length} tasks</div>
+        </div>
+        <div style={{ position:"relative",width:56,height:56,flexShrink:0 }}>
+          <Ring pct={partPct} color={ACCENT2} size={56} stroke={6}/>
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:ACCENT2 }}>{partPct}%</div>
+        </div>
+      </div>
+      {allTasks.map(task => {
+        const done = !!partnerToday[task.id];
+        return (
+          <div key={task.id} className="tr" style={{ cursor:"default" }}>
+            <div className={`cc${done?" chk":""}`} style={done?{background:ACCENT2,borderColor:ACCENT2}:{}}>
+              {done && <span style={{ color:"#fff",fontSize:13 }}>✓</span>}
+            </div>
+            <div style={{ fontSize:22 }}>{task.icon}</div>
+            <div style={{ fontSize:14,color:done?MUTED:TXT,textDecoration:done?"line-through":"none" }}>{task.label}</div>
+          </div>
+        );
+      })}
+      <div style={{ height:"1rem" }}/>
+      <button className="bp" onClick={() => setModal("nudge")}>💌 Send a Nudge to {partner.name}</button>
+      <div className="sl">Nudge Thread</div>
+      {s.nudges.filter(n=>n.from===s.activeUser||n.to===s.activeUser).slice(-8).reverse().map(n => (
+        <div key={n.id} className="card" style={{ marginBottom:8 }}>
+          <div style={{ fontSize:11,color:MUTED,marginBottom:3 }}>
+            {n.from===s.activeUser?`You → ${partner.name}`:`${partner.name} → You`}
+            {" · "}{new Date(n.time).toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata"})}
+            {n.read?" · ✓ Seen":" · Unread"}
+          </div>
+          <div style={{ fontSize:14 }}>{n.text}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const SettingsScreen = (
+    <div style={{ padding:"1rem 1rem 5rem" }} className="fade">
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:13,fontWeight:700,marginBottom:"0.75rem" }}>Active Profile</div>
+        <div style={{ display:"flex",gap:8 }}>
+          {["user1","user2"].map(uk => (
+            <button key={uk} onClick={() => save({...s,activeUser:uk})} style={{
+              flex:1,padding:10,borderRadius:12,
+              border:`2px solid ${s.activeUser===uk?ACCENT:BORDER}`,
+              background:s.activeUser===uk?`${ACCENT}15`:"transparent",
+              color:TXT,fontSize:14,fontWeight:s.activeUser===uk?700:400,
+            }}>{s.users[uk].name}</button>
+          ))}
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:13,fontWeight:700,marginBottom:"0.75rem" }}>Partner Names</div>
+        {["user1","user2"].map((uk,i) => (
+          <div key={uk} style={{ marginBottom:i===0?10:0 }}>
+            <div style={{ fontSize:11,color:MUTED,marginBottom:4 }}>Partner {i+1}</div>
+            <input value={s.users[uk].name}
+              onChange={e => save({...s,users:{...s.users,[uk]:{name:e.target.value,avatar:(e.target.value[0]||"?").toUpperCase()}}})}/>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ marginBottom:"1rem",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+        <div style={{ fontSize:13,fontWeight:700 }}>Dark Mode</div>
+        <div onClick={() => save({...s,darkMode:!s.darkMode})} style={{ width:50,height:28,borderRadius:14,background:s.darkMode?ACCENT:"#ccc",position:"relative",cursor:"pointer",transition:"background 0.3s" }}>
+          <div style={{ position:"absolute",top:4,left:s.darkMode?26:4,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.3s" }}/>
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:13,fontWeight:700,marginBottom:"0.75rem" }}>App Font</div>
+        {FONTS.map(f => (
+          <button key={f.name} onClick={() => save({...s,font:f.value})} style={{
+            display:"block",width:"100%",marginBottom:6,padding:"9px 14px",borderRadius:10,
+            border:`1.5px solid ${s.font===f.value?ACCENT:BORDER}`,
+            background:s.font===f.value?`${ACCENT}12`:"transparent",
+            color:TXT,fontFamily:f.value,fontSize:14,textAlign:"left",
+          }}>{f.name} — The quick brown fox</button>
+        ))}
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:13,fontWeight:700,marginBottom:"0.75rem" }}>Custom Tasks</div>
+        <div style={{ display:"flex",gap:8,marginBottom:8 }}>
+          <input value={customTaskInput} onChange={e => setCustomTaskInput(e.target.value)} placeholder="Add a custom task..."/>
+          <button className="bp" style={{ width:"auto",padding:"10px 18px" }} onClick={() => {
+            if (!customTaskInput.trim()) return;
+            save({...s,customTasks:[...s.customTasks,{id:`ct_${Date.now()}`,label:customTaskInput.trim(),icon:"✅",required:false}]});
+            setCustomTaskInput("");
+          }}>+</button>
+        </div>
+        {s.customTasks.map(t => (
+          <div key={t.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${BORDER}` }}>
+            <div style={{ fontSize:14 }}>✅ {t.label}</div>
+            <button onClick={() => save({...s,customTasks:s.customTasks.filter(ct=>ct.id!==t.id)})}
+              style={{ background:"none",color:"#ff4444",fontSize:20,padding:"0 4px" }}>×</button>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4 }}>
+          <div style={{ fontSize:13,fontWeight:700 }}>Daily Quotes</div>
+          <button className="bs" style={{ padding:"5px 12px",fontSize:11 }} onClick={() => setModal("quote")}>Edit</button>
+        </div>
+        <div style={{ fontSize:12,color:MUTED }}>{s.quotes.length} quotes in rotation</div>
+      </div>
+      <div className="card" style={{ marginBottom:"1rem" }}>
+        <div style={{ fontSize:13,fontWeight:700,color:ACCENT,marginBottom:6 }}>⌚ Cult Smartwatch — BLE Sync</div>
+        <div style={{ fontSize:12,color:MUTED,lineHeight:1.7,marginBottom:10 }}>Requires Chrome on Android. Cult watch must be in pairing mode.</div>
+        {cultStatus==="connected" ? (
+          <div>
+            <div style={{ fontSize:22,fontWeight:700,color:"#ff6b6b",marginBottom:8 }}>❤️ Live: {cultHRLive??"-"} bpm</div>
+            <button className="bs" style={{ width:"100%" }} onClick={() => { cultCharRef.current?.stopNotifications().catch(()=>{}); setCultStatus("idle"); setCultHRLive(null); }}>Disconnect</button>
+          </div>
+        ) : (
+          <button className="bp" onClick={connectCult} disabled={cultStatus==="scanning"} style={{ opacity:cultStatus==="scanning"?0.6:1 }}>
+            {cultStatus==="scanning"?"🔍 Scanning…":"🔗 Connect Cult Watch"}
+          </button>
+        )}
+        {cultStatus==="error" && <div style={{ color:"#ff4444",fontSize:12,marginTop:8 }}>Could not connect. Make sure Bluetooth is ON and you're using Chrome on Android.</div>}
+      </div>
+      <div className="card" style={{ background:"#ff444415",border:"1px solid #ff444435" }}>
+        <div style={{ fontSize:13,fontWeight:700,color:"#ff6666",marginBottom:4 }}>⚠️ Miss a Day? Reset to Day 1</div>
+        <div style={{ fontSize:12,color:MUTED,marginBottom:10,lineHeight:1.6 }}>Per 75 Hard rules, missing any task means starting over.</div>
+        <button style={{ background:"#cc2222",color:"#fff",borderRadius:10,padding:11,width:"100%",fontSize:13,fontWeight:700 }}
+          onClick={() => setModal("confirm")}>Reset Challenge to Day 1</button>
+      </div>
+    </div>
+  );
+
+  const screenMap = { home:HomeScreen, progress:ProgressScreen, partner:PartnerScreen, settings:SettingsScreen };
+
+  return (
+    <div style={{ background:BG,height:"100%",maxWidth:430,margin:"0 auto",fontFamily:s.font,color:TXT,position:"relative",display:"flex",flexDirection:"column" }}>
+      <style>{css}</style>
+      <div style={{ background:CARD,padding:"0.875rem 1.25rem",borderBottom:`1px solid ${BORDER}`,flexShrink:0 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:17,fontWeight:700,color:ACCENT }}>75Together 🔥</div>
+            <div style={{ fontSize:11,color:MUTED }}>Viewing as <span style={{ color:TXT,fontWeight:700 }}>{me.name}</span></div>
+          </div>
+          <button onClick={() => save({...s,activeUser:partnerKey})}
+            style={{ background:`${ACCENT}18`,border:`1.5px solid ${ACCENT}`,color:ACCENT,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:700 }}>
+            Switch →
+          </button>
+        </div>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch" }}>
+        {screenMap[screen]}
+      </div>
+      <div className="nav">
+        {[{id:"home",icon:"🏠",label:"Home"},{id:"progress",icon:"📊",label:"Progress"},{id:"partner",icon:"💑",label:"Partner"},{id:"settings",icon:"⚙️",label:"Settings"}].map(n => (
+          <button key={n.id} className={`ni${screen===n.id?" act":""}`} onClick={() => setScreen(n.id)}>
+            <span>{n.icon}</span>{n.label}
+          </button>
+        ))}
+      </div>
+
+      {showCelebration && (
+        <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300 }}>
+          <div className="pop" style={{ textAlign:"center",padding:"2rem" }}>
+            <div style={{ fontSize:88 }}>🏆</div>
+            <div style={{ fontSize:28,fontWeight:700,color:ACCENT,marginTop:"0.75rem" }}>Day {currentDay} Complete!</div>
+            <div style={{ color:MUTED,marginTop:"0.5rem",fontSize:15,lineHeight:1.5 }}>You crushed every single task. 🔥</div>
+          </div>
+        </div>
+      )}
+
+      {modal==="nudge" && <Overlay>
+        <div style={{ fontSize:16,fontWeight:700,marginBottom:"1rem" }}>💌 Nudge {partner.name}</div>
+        <textarea value={nudgeText} onChange={e => setNudgeText(e.target.value)} placeholder={`Fire up ${partner.name}…`} rows={4} style={{ marginBottom:"1rem",resize:"none" }}/>
+        <div style={{ display:"flex",gap:8 }}>
+          <button className="bs" style={{ flex:1 }} onClick={() => setModal(null)}>Cancel</button>
+          <button className="bp" style={{ flex:1 }} onClick={sendNudge}>Send 💌</button>
+        </div>
+      </Overlay>}
+
+      {modal==="quote" && <Overlay>
+        <div style={{ maxHeight:"70vh",overflowY:"auto" }}>
+          <div style={{ fontSize:16,fontWeight:700,marginBottom:"1rem" }}>✏️ Edit Quotes</div>
+          <div style={{ display:"flex",gap:8,marginBottom:"1rem" }}>
+            <textarea value={newQuote} onChange={e => setNewQuote(e.target.value)} placeholder="Your custom quote…" rows={2} style={{ resize:"none" }}/>
+            <button className="bp" style={{ width:"auto",padding:"8px 16px" }} onClick={() => {
+              if (!newQuote.trim()) return;
+              save({...s,quotes:[...s.quotes,newQuote.trim()]}); setNewQuote("");
+            }}>Add</button>
+          </div>
+          {s.quotes.map((q,i) => (
+            <div key={i} style={{ display:"flex",gap:8,alignItems:"flex-start",marginBottom:6,padding:8,borderRadius:8,background:CARD2 }}>
+              <div style={{ flex:1,fontSize:12,color:TXT,lineHeight:1.5 }}>{q}</div>
+              <button onClick={() => save({...s,quotes:s.quotes.filter((_,j)=>j!==i)})} style={{ background:"none",color:"#ff4444",fontSize:18 }}>×</button>
+            </div>
+          ))}
+          <button className="bp" style={{ marginTop:"1rem" }} onClick={() => setModal(null)}>Done</button>
+        </div>
+      </Overlay>}
+
+      {modal==="milestone" && <Overlay>
+        <div style={{ fontSize:16,fontWeight:700,marginBottom:"0.4rem" }}>🎁 Set Milestone Reward</div>
+        <div style={{ fontSize:12,color:MUTED,marginBottom:"1rem" }}>Day {milestoneDay} — partner must arrange this!</div>
+        <textarea value={goalText} onChange={e => setGoalText(e.target.value)} placeholder="e.g. Dinner at Fatty Bao 🍜" rows={3} style={{ marginBottom:"1rem",resize:"none" }}/>
+        <div style={{ display:"flex",gap:8 }}>
+          <button className="bs" style={{ flex:1 }} onClick={() => setModal(null)}>Cancel</button>
+          <button className="bp" style={{ flex:1 }} onClick={saveMilestoneGoal}>Save 🎁</button>
+        </div>
+      </Overlay>}
+
+      {modal==="confirm" && <Overlay>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:36,marginBottom:"0.5rem" }}>⚠️</div>
+          <div style={{ fontSize:16,fontWeight:700,marginBottom:"0.5rem" }}>Reset to Day 1?</div>
+          <div style={{ fontSize:13,color:MUTED,marginBottom:"1.5rem",lineHeight:1.65 }}>All task history, photos and nudges will be erased. Cannot be undone.</div>
+          <div style={{ display:"flex",gap:8 }}>
+            <button className="bs" style={{ flex:1 }} onClick={() => setModal(null)}>Cancel</button>
+            <button style={{ flex:1,background:"#cc2222",color:"#fff",borderRadius:12,padding:12,fontSize:14,fontWeight:700 }} onClick={doReset}>Yes, Reset</button>
+          </div>
+        </div>
+      </Overlay>}
+
+      {modal==="camera" && <Overlay>
+        <div style={{ fontSize:15,fontWeight:700,marginBottom:"0.75rem",textAlign:"center" }}>📸 Progress Photo</div>
+        <div style={{ background:"#000",borderRadius:12,overflow:"hidden",marginBottom:"0.75rem",minHeight:200,position:"relative",display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <video ref={videoRef} autoPlay playsInline muted style={{ width:"100%",display:"block" }}/>
+          {!cameraReady && <div style={{ position:"absolute",color:MUTED,fontSize:13 }}>Starting camera…</div>}
+        </div>
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+        <div style={{ display:"flex",gap:8 }}>
+          <button className="bs" style={{ flex:1 }} onClick={() => setModal(null)}>Cancel</button>
+          <button className="bp" style={{ flex:1,opacity:cameraReady?1:0.45 }} onClick={cameraReady?capturePhoto:undefined}>
+            {cameraReady?"📸 Capture":"Loading…"}
+          </button>
+        </div>
+      </Overlay>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
